@@ -195,6 +195,21 @@ def update_order_status(request, order_id, status):
     order = get_object_or_404(Order, id=order_id)
     order.status = status
     order.save()
+
+    # Email only if status is packed, shipped, or delivered
+    if status in ["Packed", "Shipped", "Delivered"]:
+        subject = f"Your Order #{order.id} is {status}!"
+        message = f"Hello {order.user.username},\n\nYour order (ID: {order.id}) has been {status}.\n\nThank you for shopping with us!"
+        recipient_email = order.user.email  # Assuming order has a user field
+
+        send_mail(
+            subject,
+            message,
+            settings.DEFAULT_FROM_EMAIL,  # Sender email
+            [recipient_email],  # Receiver email
+            fail_silently=False,
+        )
+
     return redirect(admin_orders)
 
 # --------user---------------
