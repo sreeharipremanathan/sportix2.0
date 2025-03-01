@@ -355,7 +355,7 @@ def checkout(request):
             saved_addresses.append(new_address)
             request.session["saved_addresses"] = saved_addresses
 
-        request.session["checkout_address"] = address  # Store selected address
+        request.session["checkout_address"] = address  
         request.session.modified = True
         return redirect(complete_order)  # Proceed to order completion
 
@@ -415,18 +415,37 @@ def complete_order(request):
 def order_success(request):
     return render(request, "user/order_success.html")
 
-def buy_now(request,id):
+# def buy_now(request,id):
+#     product = Products.objects.get(id=id)
+
+#     request.session["buy_now"] = {
+#         "id": product.id,
+#         "name": product.name,
+#         "price": float(product.offer_price),
+#         "quantity": 1,  
+#     }
+#     request.session.modified = True
+
+#     return redirect(checkout) 
+
+def buy_now(request, id):
+    if request.method == "POST":
+        quantity = int(request.POST.get("quantity", 1))  # Get quantity from the form
+    else:
+        quantity = 1  # Default to 1 if not a POST request
+
     product = Products.objects.get(id=id)
+    total_price = float(product.offer_price) * quantity
 
     request.session["buy_now"] = {
         "id": product.id,
         "name": product.name,
-        "price": float(product.offer_price),
-        "quantity": 1,  
+        "price": total_price,
+        "quantity": quantity,  
     }
     request.session.modified = True
 
-    return redirect(checkout) 
+    return redirect(checkout)
 
 def user_profile(req):
     cat=Category.objects.all()
@@ -466,7 +485,7 @@ def cancel_order(request, order_id):
     order = get_object_or_404(Order, id=order_id, user=request.user)
     
     if order.is_cancellable():
-        order.delete()  # Delete the order from the database
+        order.delete()
         messages.success(request, "Your order has been cancelled and removed.")
     else:
         messages.error(request, "You can only cancel orders within 2 days.")

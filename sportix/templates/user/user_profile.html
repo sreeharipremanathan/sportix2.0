@@ -201,8 +201,8 @@
                 <div class="col-md-2 text-center">
                     {% if order.status == "Pending" %}
                         <span class="badge bg-warning text-dark">Pending</span>
-                    {% elif order.status == "Approved" %}
-                        <span class="badge bg-primary">Approved</span>
+                    {% elif order.status == "Packed" %}
+                        <span class="badge bg-primary">Packed</span>
                     {% elif order.status == "Shipped" %}
                         <span class="badge bg-info">Shipped</span>
                     {% elif order.status == "Delivered" %}

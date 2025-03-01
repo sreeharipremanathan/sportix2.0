@@ -33,8 +33,7 @@ class CartItem(models.Model):
 class Order(models.Model):
     STATUS_CHOICES = [
         ("Pending", "Pending"),
-        ("Approved", "Approved"),
-        ("Rejected", "Rejected"),
+        ("Packed", "Packed"),
         ("Shipped", "Shipped"),
         ("Delivered", "Delivered"),
     ]
