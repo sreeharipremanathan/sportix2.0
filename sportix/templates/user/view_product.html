@@ -26,7 +26,7 @@
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark " style="background-color: black;">
+    <nav class="navbar navbar-expand-lg navbar-dark fixed-top" style="background-color: black;">
         <div class="container">
             <a class="navbar-brand" href="../../">Sportix</a>
     
@@ -135,12 +135,12 @@
         </div>
     </nav>
 
-    <div class="container mt-5">
+    <div class="container mt-5" style="padding-top: 20px;">
         <div class="container mt-5">
             <div class="row">
                 <!-- Product Image -->
                 <div class="col-md-4">
-                    <img src="{{ product.image.url }}" class="img-fluid rounded" alt="{{ product.name }}" style="max-height: 250px; width: auto;">
+                    <img src="{{ product.image.url }}" class="img-fluid rounded" alt="{{ product.name }}" style="max-height: 250px; width: auto; margin: 10px;">
                 </div>
         
                 <!-- Product Details -->
@@ -184,14 +184,15 @@
         <div class="mt-5">
             <h4>Related Products</h4>
             <div class="row">
-                {% for related in related_products %}
-                    <div class="col-md-3">
-                        <a href="../view_product/{{ related.id }}" class="text-decoration-none">
-                            <div class="card">
-                                <img src="{{ related.image.url }}" class="card-img-top" alt="{{ related.name }}">
-                                <div class="card-body text-center">
-                                    <h6>{{ related.name }}</h6>
-                                    <p class="text-success">₹{{ related.offer_price }}</p>
+                {% for product in related_products %}
+                    <div class="col-lg-3 col-md-4 col-6 mb-4 products">
+                        <a href="../../view_product/{{ product.id }}" class="text-decoration-none">
+                            <div class="card shadow-sm border-0 product-card">
+                                <img src="{{ product.image.url }}" class="card-img-top" alt="{{ product.name }}">
+                                <div class="card-body">
+                                    <h5 class="card-title">{{ product.name }}</h5>
+                                    <p class="card-text">{{ product.description|truncatechars:30 }}</p>
+                                    <p class="fw-bold">₹{{ product.offer_price }} <del class="text-muted">₹{{ product.price }}</del></p>
                                 </div>
                             </div>
                         </a>

@@ -12,7 +12,14 @@
             display: flex;
             align-items: center;
             width: 250px; /* Adjust width as needed */
-            padding-top: 5%;
+            padding-top: 4%;
+        }#seeMoreBtn{
+            color: black;
+            background-color: #dfdfe0;
+        }
+        #seeLessBtn{
+            color: black;
+            background-color: #dfdfe0;
         }
         footer a{
           color: white;
@@ -142,7 +149,7 @@
         <h2 class="text-center mb-4">Featured Products</h2>
         <div class="row">
             {% for product in data %}
-                <div class="col-lg-3 col-md-4 col-6 mb-4 products">
+                <div class="col-lg-3 col-md-4 col-6 mb-4 products {% if forloop.counter > 8 %}d-none more-products{% endif %}">
                     <a href="../view_product/{{ product.id }}" class="text-decoration-none">
                         <div class="card shadow-sm border-0 product-card">
                             <img src="{{ product.image.url }}" class="card-img-top" alt="{{ product.name }}">
@@ -155,6 +162,11 @@
                     </a>
                 </div>
             {% endfor %}
+        </div>
+        <!-- Buttons -->
+        <div class="text-center mt-3">
+            <button id="seeMoreBtn" class="btn">See More</button>
+            <button id="seeLessBtn" class="btn d-none">See Less</button>
         </div>
     </div>
 
@@ -251,6 +263,21 @@
                     searchForm.style.display = "none";
                 }
             });
+        });
+        document.getElementById("seeMoreBtn").addEventListener("click", function() {
+            let hiddenCars = document.querySelectorAll(".more-products");
+            hiddenCars.forEach(car => car.classList.remove("d-none")); 
+            
+            this.classList.add("d-none");  // Hide "See More"
+            document.getElementById("seeLessBtn").classList.remove("d-none");  // Show "See Less"
+        });
+    
+        document.getElementById("seeLessBtn").addEventListener("click", function() {
+            let hiddenCars = document.querySelectorAll(".more-products");
+            hiddenCars.forEach(car => car.classList.add("d-none")); 
+            
+            this.classList.add("d-none");  // Hide "See Less"
+            document.getElementById("seeMoreBtn").classList.remove("d-none");  // Show "See More"
         });
     </script>
 </body>
