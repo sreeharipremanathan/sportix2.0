@@ -321,40 +321,13 @@ def contact_us(request):
     return render(request, "user/contact.html",{'cat':cat})
 
 
-# def checkout(request):
-#     buy_now = request.session.get("buy_now", None)
-#     cart = request.session.get("cart", {})
 
-#     if request.method == "POST":
-#         address = request.POST.get("address")
-#         request.session["checkout_address"] = address  # Store address in session
-#         request.session.modified = True
-#         return redirect(complete_order)  # Redirect to order completion
-
-#     if buy_now:
-#         products = [buy_now]
-#         total_price = buy_now["price"]
-#     else:
-#         products = cart.values()
-#         total_price = sum(float(item["price"]) * item["quantity"] for item in cart.values())
-
-#     expected_delivery = datetime.now() + timedelta(days=7)  # 7 days from now
-#     expected_delivery = expected_delivery.strftime("%B %d, %Y")  # Format: "February 28, 2025"
-
-#     context = {
-#         "products": products,
-#         "total_price": total_price,
-#         "expected_delivery": expected_delivery,  # Pass to template
-#     }
-    
-#     return render(request, "user/checkout.html", context)
 
 def checkout(request):
     user = request.user
     cart = request.session.get("cart", {}).copy()  # Copy to avoid modifying original
     buy_now = request.session.get("buy_now", None)
 
-    # 🚨 Ensure no mix-ups!
     if "buy_now" in request.session and cart:  # If cart exists, remove buy_now
         request.session.pop("buy_now", None)
     elif "cart" in request.session and buy_now:  # If buy_now exists, remove cart
