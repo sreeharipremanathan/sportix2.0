@@ -164,7 +164,7 @@
                 <div class="card p-3">
                     <h4>Select Address</h4>
 
-                    <form method="POST" action="{% url 'checkout' %}">
+                    <form method="POST" action="checkout">
                         {% csrf_token %}
                         
                         {% if saved_addresses %}
@@ -181,10 +181,11 @@
                         <textarea name="new_address" class="form-control mb-3" placeholder="Enter new address (Optional)"></textarea>
                     
                         <h5>Payment Method</h5>
-                        <input type="radio" name="payment_method" value="cod" checked> Cash on Delivery
-                        <input type="radio" name="payment_method" value="razorpay" class="ms-3"> Online Payment
+                        <form id="razorpay-form">
+                            <button type="button" id="pay-btn" class="btn btn-success mt-4 w-100">Pay Now</button>
+                        </form>
                     
-                        <button type="submit" class="btn btn-success mt-4 w-100">Place Order</button>
+                        <!-- <button type="submit" class="btn btn-success mt-4 w-100">Place Order</button> -->
                     </form>
                 </div>
             </div>
@@ -286,7 +287,53 @@
         </div>
         <hr>
     </footer>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script>
+       document.getElementById("pay-btn").onclick = function () {
+        fetch("{% url 'create_razorpay_order' %}", {
+            method: "POST",
+            headers: { "X-CSRFToken": "{{ csrf_token }}", "Content-Type": "application/json" },
+            body: JSON.stringify({ amount: "{{ total_price|floatformat:2 }}" })  // ✅ Ensure valid JSON format
+        })
+        .then(response => response.json()) 
+        .then(data => {
+            if (data.id) {
+                var options = {
+                    key: "{{ razorpay_key }}",  
+                    amount: data.amount,
+                    currency: "INR",
+                    name: "My Store",
+                    description: "Test Transaction",
+                    order_id: data.id,
+                    handler: function (response) {
+                        fetch("{% url 'complete_order' %}", {
+                            method: "POST",
+                            headers: { "X-CSRFToken": "{{ csrf_token }}", "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_signature: response.razorpay_signature
+                            })
+                        })
+                        .then(res => res.json())
+                        .then(result => {
+                            if (result.status === "success") {
+                                window.location.href = "{% url 'payment_success' %}";
+                            } else {
+                                window.location.href = "{% url 'payment_failed' %}";
+                            }
+                        });
+                    }
+                };
+                var rzp1 = new Razorpay(options);
+                rzp1.open();
+            } else {
+                alert("Error: " + data.error);
+            }
+        });
+    };
 
+    </script>
 
 
     <!-- <form method="POST">

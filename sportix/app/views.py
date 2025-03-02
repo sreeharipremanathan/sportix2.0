@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 import razorpay
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-
+import json
 
 
 # Create your views here.
@@ -322,21 +322,70 @@ def contact_us(request):
 
 
 
+# working good
+# def checkout(request):
+#     user = request.user
+#     cart = request.session.get("cart", {}).copy()  # Copy cart session to avoid unwanted clearing
+#     buy_now = request.session.get("buy_now", None)
+
+#     # Don't remove "buy_now" or "cart" in checkout, handle them separately in complete_order
+
+#     saved_addresses = request.session.get("saved_addresses", []) 
+
+#     if request.method == "POST":
+#         selected_address = request.POST.get("selected_address")
+#         new_address = request.POST.get("new_address")
+
+#         # Choose address (prioritizing new_address if provided)
+#         address = new_address if new_address else selected_address
+#         if not address:
+#             messages.error(request, "Please enter or select an address.")
+#             return redirect("checkout")
+
+#         if new_address and new_address not in saved_addresses:
+#             saved_addresses.append(new_address)
+#             request.session["saved_addresses"] = saved_addresses
+
+#         request.session["checkout_address"] = address  
+#         request.session.modified = True
+#         return redirect(complete_order) 
+
+#     # Handling "Buy Now" separately without clearing the cart
+#     if buy_now:
+#         products = [buy_now]
+#         total_price = float(buy_now["price"])
+#     else:
+#         products = cart.values()
+#         total_price = sum(float(item["price"]) * item["quantity"] for item in cart.values())
+
+#     expected_delivery = (datetime.now() + timedelta(days=7)).strftime("%B %d, %Y")
+
+#     context = {
+#         "products": products,
+#         "total_price": total_price,
+#         "expected_delivery": expected_delivery,
+#         "saved_addresses": saved_addresses,
+#     }
+#     print("SESSION DATA:", request.session.get("buy_now"))
+#     return render(request, "user/checkout.html", context)
+
 
 def checkout(request):
     user = request.user
-    cart = request.session.get("cart", {}).copy()  # Copy cart session to avoid unwanted clearing
+    cart = request.session.get("cart", {}).copy()  
     buy_now = request.session.get("buy_now", None)
-
-    # Don't remove "buy_now" or "cart" in checkout, handle them separately in complete_order
-
     saved_addresses = request.session.get("saved_addresses", []) 
+
+    # Choose only one: Buy Now or Cart
+    if "buy_now" in request.session and cart:
+        request.session.pop("buy_now", None)
+    elif "cart" in request.session and buy_now:
+        request.session.pop("cart", None)
 
     if request.method == "POST":
         selected_address = request.POST.get("selected_address")
         new_address = request.POST.get("new_address")
 
-        # Choose address (prioritizing new_address if provided)
         address = new_address if new_address else selected_address
         if not address:
             messages.error(request, "Please enter or select an address.")
@@ -348,9 +397,9 @@ def checkout(request):
 
         request.session["checkout_address"] = address  
         request.session.modified = True
-        return redirect(complete_order) 
+        return redirect(verify_payment_and_complete_order)  
 
-    # Handling "Buy Now" separately without clearing the cart
+    # Determine total price
     if buy_now:
         products = [buy_now]
         total_price = float(buy_now["price"])
@@ -362,57 +411,130 @@ def checkout(request):
 
     context = {
         "products": products,
-        "total_price": total_price,
+        "total_price": total_price,  # 🔥 Pass total price for Razorpay
         "expected_delivery": expected_delivery,
         "saved_addresses": saved_addresses,
+        "razorpay_key": settings.RAZORPAY_KEY_ID,  # 🔥 Pass Razorpay Key
     }
-    print("SESSION DATA:", request.session.get("buy_now"))
+
     return render(request, "user/checkout.html", context)
 
 
-def complete_order(request):
-    address = request.session.get("checkout_address")
-    
-    if not address:
-        return redirect(checkout) 
+@csrf_exempt
+def verify_payment_and_complete_order(request):  # 🔥 Renamed to avoid conflict
+    if request.method == "POST":
+        razorpay_payment_id = request.POST.get("razorpay_payment_id")
+        razorpay_order_id = request.POST.get("razorpay_order_id")
+        razorpay_signature = request.POST.get("razorpay_signature")
 
-    buy_now = request.session.get("buy_now", None)
-    cart = request.session.get("cart", {})
+        address = request.session.get("checkout_address")
+        buy_now = request.session.get("buy_now", None)
+        cart = request.session.get("cart", {})
 
-    print(f"BUY NOW: {buy_now}")  # Debugging
-    print(f"CART CONTENTS: {cart}")  # Debugging
+        if not address:
+            return redirect("checkout")
 
-    if buy_now:
-        # 🛠 Process only Buy Now order and ignore cart
-        Order.objects.create(
-            user=request.user,
-            product_id=buy_now["id"],
-            quantity=buy_now["quantity"],  
-            total_price=buy_now["price"],
-            address=address,
-        )
-        request.session.pop("buy_now", None)  # ✅ Clear Buy Now after order
-        request.session.pop("checkout_address", None)
-        request.session.modified = True
-        return redirect(order_success)  # ✅ Immediately return, don't process cart!
+        # Verify Razorpay Payment
+        client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+        try:
+            client.utility.verify_payment_signature({
+                "razorpay_order_id": razorpay_order_id,
+                "razorpay_payment_id": razorpay_payment_id,
+                "razorpay_signature": razorpay_signature,
+            })
+        except razorpay.errors.SignatureVerificationError:
+            return redirect("payment_failed")
 
-    elif cart:  
-        # 🛠 Process Cart order only if Buy Now is not present
-        for product_id, item in cart.items():
+        # Create Order in Database
+        if buy_now:
             Order.objects.create(
                 user=request.user,
-                product_id=product_id,
-                quantity=item["quantity"],
-                total_price=item["price"] * item["quantity"],
+                product_id=buy_now["id"],
+                quantity=buy_now["quantity"],
+                total_price=buy_now["price"],
                 address=address,
             )
-        request.session.pop("cart", None)  # ✅ Clear Cart after order
+        elif cart:
+            for product_id, item in cart.items():
+                Order.objects.create(
+                    user=request.user,
+                    product_id=product_id,
+                    quantity=item["quantity"],
+                    total_price=item["price"] * item["quantity"],
+                    address=address,
+                )
 
-    request.session.pop("checkout_address", None)
-    request.session.modified = True
+        # Clear Session after Order is Placed
+        request.session.pop("checkout_address", None)
+        request.session.pop("buy_now", None)
+        request.session.pop("cart", None)
+        request.session.modified = True
 
-    return redirect(order_success)
+        return redirect("payment_success")
 
+@csrf_exempt
+def complete_order(request):
+    if request.method == "POST":
+        data = json.loads(request.body)  # ✅ This ensures JSON handling
+        razorpay_payment_id = data.get("razorpay_payment_id")
+        razorpay_order_id = data.get("razorpay_order_id")
+        razorpay_signature = data.get("razorpay_signature")
+
+
+# @csrf_exempt
+# def complete_order(request):
+#     if request.method == "POST":
+#         razorpay_payment_id = request.POST.get("razorpay_payment_id")
+#         razorpay_order_id = request.POST.get("razorpay_order_id")
+#         razorpay_signature = request.POST.get("razorpay_signature")
+
+#         address = request.session.get("checkout_address")
+#         buy_now = request.session.get("buy_now", None)
+#         cart = request.session.get("cart", {})
+
+#         if not address:
+#             return redirect("checkout")
+
+#         # Verify Razorpay Payment
+#         client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+#         try:
+#             client.utility.verify_payment_signature({
+#                 "razorpay_order_id": razorpay_order_id,
+#                 "razorpay_payment_id": razorpay_payment_id,
+#                 "razorpay_signature": razorpay_signature,
+#             })
+#         except razorpay.errors.SignatureVerificationError:
+#             return redirect("payment_failed")
+
+#         # Create Order in Database
+#         if buy_now:
+#             Order.objects.create(
+#                 user=request.user,
+#                 product_id=buy_now["id"],
+#                 quantity=buy_now["quantity"],
+#                 total_price=buy_now["price"],
+#                 address=address,
+#             )
+#         elif cart:
+#             for product_id, item in cart.items():
+#                 Order.objects.create(
+#                     user=request.user,
+#                     product_id=product_id,
+#                     quantity=item["quantity"],
+#                     total_price=item["price"] * item["quantity"],
+#                     address=address,
+#                 )
+
+#         # Clear Session after Order is Placed
+#         request.session.pop("checkout_address", None)
+#         request.session.pop("buy_now", None)
+#         request.session.pop("cart", None)
+#         request.session.modified = True
+
+#         return redirect("payment_success")
+
+
+# working good
 # def complete_order(request):
 #     address = request.session.get("checkout_address")
     
@@ -420,32 +542,42 @@ def complete_order(request):
 #         return redirect(checkout) 
 
 #     buy_now = request.session.get("buy_now", None)
-#     cart = request.session.get("cart", {}).copy()  
+#     cart = request.session.get("cart", {})
+
+#     print(f"BUY NOW: {buy_now}")  # Debugging
+#     print(f"CART CONTENTS: {cart}")  # Debugging
 
 #     if buy_now:
+#         # 🛠 Process only Buy Now order and ignore cart
 #         Order.objects.create(
 #             user=request.user,
 #             product_id=buy_now["id"],
-#             quantity=1,
+#             quantity=buy_now["quantity"],  
 #             total_price=buy_now["price"],
 #             address=address,
 #         )
-#         request.session.pop("buy_now", None)  # Remove only Buy Now, keep cart!
-#     else:
+#         request.session.pop("buy_now", None)  # ✅ Clear Buy Now after order
+#         request.session.pop("checkout_address", None)
+#         request.session.modified = True
+#         return redirect(order_success)  # ✅ Immediately return, don't process cart!
+
+#     elif cart:  
+#         # 🛠 Process Cart order only if Buy Now is not present
 #         for product_id, item in cart.items():
 #             Order.objects.create(
 #                 user=request.user,
 #                 product_id=product_id,
 #                 quantity=item["quantity"],
-#                 total_price=item["quantity"] * item["price"],
+#                 total_price=item["price"] * item["quantity"],
 #                 address=address,
 #             )
-#         request.session.pop("cart", None)  # Clear cart only if using cart checkout
+#         request.session.pop("cart", None)  # ✅ Clear Cart after order
 
 #     request.session.pop("checkout_address", None)
 #     request.session.modified = True
 
 #     return redirect(order_success)
+
 
 
 def order_success(request):
@@ -527,3 +659,25 @@ def cancel_order(request, order_id):
         messages.error(request, "You can only cancel orders within 2 days.")
 
     return redirect(user_profile)
+
+
+def create_razorpay_order(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            amount = int(float(data["amount"]) * 100)  # Convert to paisa
+
+            client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+            razorpay_order = client.order.create(
+                {"amount": amount, "currency": "INR", "payment_capture": "1"}
+            )
+
+            return JsonResponse({"id": razorpay_order["id"], "amount": amount})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+        
+def payment_success(request):
+    return render(request, "user/payment_success.html")
+
+def payment_failed(request):
+    return render(request, "user/payment_failed.html")
