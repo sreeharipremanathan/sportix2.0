@@ -133,3 +133,12 @@ EMAIL_USE_TLS = True
 EMAIL_PORT = 587
 EMAIL_HOST_USER = 'sportixmerch@gmail.com'
 EMAIL_HOST_PASSWORD = 'tzbd nfyx rbhq hdhu'
+
+RAZORPAY_KEY_ID = 'rzp_test_DvtkLvwyl7OYvk'
+RAZORPAY_KEY_SECRET = 'Vx7huIQgI7etKDXYybmzTUfr'
+
+
+SESSION_ENGINE = "django.contrib.sessions.backends.db"  # Store sessions in DB
+SESSION_COOKIE_AGE = 86400  # 1 day
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Keep session active even after closing browser
+SESSION_SAVE_EVERY_REQUEST = True  # Save session on every request

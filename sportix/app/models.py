@@ -37,6 +37,11 @@ class Order(models.Model):
         ("Shipped", "Shipped"),
         ("Delivered", "Delivered"),
     ]
+    PAYMENT_STATUS_CHOICES = [
+        ("Pending", "Pending"),
+        ("Paid", "Paid"),
+        ("Failed", "Failed"),
+    ]
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     product = models.ForeignKey(Products, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField()
@@ -44,7 +49,8 @@ class Order(models.Model):
     address = models.TextField()
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="Pending")
     created_at = models.DateTimeField(auto_now_add=True)
-
+    payment_id = models.CharField(max_length=100, blank=True, null=True)  # Razorpay Payment ID
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default="Pending")  # Payment status
     def is_cancellable(self):
         return (now() - self.created_at) <= timedelta(days=2) and self.status == "Pending"
     def __str__(self):

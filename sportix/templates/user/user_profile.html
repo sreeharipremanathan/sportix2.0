@@ -204,7 +204,7 @@
                     <h5 class="mb-1">{{ order.product.name }}</h5>
                 </div>
                 <div class="col-md-2 text-center">
-                    <h5 class="text-dark">₹{{ order.product.offer_price }}</h5>
+                    <h5 class="text-dark">₹{{ order.total_price }}</h5>
                 </div>
                 <div class="col-md-2 text-center">
                     {% if order.status == "Pending" %}

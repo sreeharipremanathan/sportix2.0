@@ -325,20 +325,18 @@ def contact_us(request):
 
 def checkout(request):
     user = request.user
-    cart = request.session.get("cart", {}).copy()  # Copy to avoid modifying original
+    cart = request.session.get("cart", {}).copy()  # Copy cart session to avoid unwanted clearing
     buy_now = request.session.get("buy_now", None)
 
-    if "buy_now" in request.session and cart:  # If cart exists, remove buy_now
-        request.session.pop("buy_now", None)
-    elif "cart" in request.session and buy_now:  # If buy_now exists, remove cart
-        request.session.pop("cart", None)
+    # Don't remove "buy_now" or "cart" in checkout, handle them separately in complete_order
 
-    saved_addresses = request.session.get("saved_addresses", [])
+    saved_addresses = request.session.get("saved_addresses", []) 
 
     if request.method == "POST":
         selected_address = request.POST.get("selected_address")
         new_address = request.POST.get("new_address")
 
+        # Choose address (prioritizing new_address if provided)
         address = new_address if new_address else selected_address
         if not address:
             messages.error(request, "Please enter or select an address.")
@@ -348,11 +346,11 @@ def checkout(request):
             saved_addresses.append(new_address)
             request.session["saved_addresses"] = saved_addresses
 
-        request.session["checkout_address"] = address
+        request.session["checkout_address"] = address  
         request.session.modified = True
-        return redirect(complete_order)
+        return redirect(complete_order) 
 
-    # 👇 Now we are 100% sure only one of them will exist
+    # Handling "Buy Now" separately without clearing the cart
     if buy_now:
         products = [buy_now]
         total_price = float(buy_now["price"])
@@ -368,7 +366,7 @@ def checkout(request):
         "expected_delivery": expected_delivery,
         "saved_addresses": saved_addresses,
     }
-
+    print("SESSION DATA:", request.session.get("buy_now"))
     return render(request, "user/checkout.html", context)
 
 
@@ -376,34 +374,78 @@ def complete_order(request):
     address = request.session.get("checkout_address")
     
     if not address:
-        return redirect(checkout)
+        return redirect(checkout) 
 
-    buy_now = request.session.pop("buy_now", None)  # Remove buy_now after order
-    cart = request.session.get("cart", {}).copy()  # Copy cart to prevent clearing on errors
+    buy_now = request.session.get("buy_now", None)
+    cart = request.session.get("cart", {})
+
+    print(f"BUY NOW: {buy_now}")  # Debugging
+    print(f"CART CONTENTS: {cart}")  # Debugging
 
     if buy_now:
+        # 🛠 Process only Buy Now order and ignore cart
         Order.objects.create(
             user=request.user,
             product_id=buy_now["id"],
-            quantity=1,
+            quantity=buy_now["quantity"],  
             total_price=buy_now["price"],
             address=address,
         )
-    elif cart:
+        request.session.pop("buy_now", None)  # ✅ Clear Buy Now after order
+        request.session.pop("checkout_address", None)
+        request.session.modified = True
+        return redirect(order_success)  # ✅ Immediately return, don't process cart!
+
+    elif cart:  
+        # 🛠 Process Cart order only if Buy Now is not present
         for product_id, item in cart.items():
             Order.objects.create(
                 user=request.user,
                 product_id=product_id,
                 quantity=item["quantity"],
-                total_price=item["quantity"] * item["price"],
+                total_price=item["price"] * item["quantity"],
                 address=address,
             )
-        request.session.pop("cart", None)  # 🚀 Only clear cart when order is placed!
+        request.session.pop("cart", None)  # ✅ Clear Cart after order
 
     request.session.pop("checkout_address", None)
     request.session.modified = True
 
     return redirect(order_success)
+
+# def complete_order(request):
+#     address = request.session.get("checkout_address")
+    
+#     if not address:
+#         return redirect(checkout) 
+
+#     buy_now = request.session.get("buy_now", None)
+#     cart = request.session.get("cart", {}).copy()  
+
+#     if buy_now:
+#         Order.objects.create(
+#             user=request.user,
+#             product_id=buy_now["id"],
+#             quantity=1,
+#             total_price=buy_now["price"],
+#             address=address,
+#         )
+#         request.session.pop("buy_now", None)  # Remove only Buy Now, keep cart!
+#     else:
+#         for product_id, item in cart.items():
+#             Order.objects.create(
+#                 user=request.user,
+#                 product_id=product_id,
+#                 quantity=item["quantity"],
+#                 total_price=item["quantity"] * item["price"],
+#                 address=address,
+#             )
+#         request.session.pop("cart", None)  # Clear cart only if using cart checkout
+
+#     request.session.pop("checkout_address", None)
+#     request.session.modified = True
+
+#     return redirect(order_success)
 
 
 def order_success(request):
