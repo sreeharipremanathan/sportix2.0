@@ -36,6 +36,7 @@
                     <th>Quantity</th>
                     <th>Total Price</th>
                     <th>Address</th>
+                    <th>Mobile</th>
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
@@ -49,6 +50,7 @@
                     <td>{{ order.quantity }}</td>
                     <td>₹{{ order.total_price }}</td>
                     <td>{{ order.address }}</td>
+                    <td>{{ order.mobile_number }}</td>
                     <td><strong>{{ order.status }}</strong></td>
                     <td>
                         {% if order.status == "Pending" %}

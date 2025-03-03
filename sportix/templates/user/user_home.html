@@ -21,7 +21,17 @@
             align-items: center;
             width: 250px; /* Adjust width as needed */
             padding-top: 4%;
-        }#seeMoreBtn{
+        }
+        .hero {
+            background: url("{% static 'images/bg1.jpg' %}") center/cover no-repeat;
+            color: white;
+            /* text-align: center; */
+            padding: 190px 20px;
+            left: 20%;
+            top: 50%;
+            height: 600px;
+        }
+        #seeMoreBtn{
             color: black;
             background-color: #dfdfe0;
         }
@@ -41,6 +51,10 @@
                 width: 100%;
                 margin-top: 10px; /* Adjust for mobile view */
             }
+            .nav-link svg{
+                display: none;
+            }
+            
         }
         
     </style>
@@ -155,6 +169,11 @@
             </div>
         </div>
     </nav>
+
+    <div class="hero " style="padding-top: 180px;">
+        <h2 class="display-4 fw-bold">LIVE ON</h2>
+        <h3 class="lead fw-bold">LIKE A PRO</h3>
+    </div>
 
     <div class="container mt-4">
         <h2 class="text-center mb-4">Featured Products</h2>

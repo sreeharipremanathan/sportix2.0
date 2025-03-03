@@ -38,40 +38,69 @@ def sportix_login(req):
                 return redirect(reverse('sportix_login'))
     return render(req, 'login.html')
 
+def send_verification_email(user):
+    token, created = EmailVerification.objects.get_or_create(user=user)
+    verification_link = f"http://127.0.0.1:8000/verify-email/{token.token}/"
+
+    send_mail(
+        "Verify Your Email",
+        f"Click the link to verify your email: {verification_link}",
+        settings.EMAIL_HOST_USER,
+        [user.email],
+        fail_silently=False,
+    )
+
 def register(req):
     if req.method == 'POST':
         name = req.POST['name']
         email = req.POST['email']
         password = req.POST['password']
-        
+
         try:
             validate_password(password)
             
-            
-            if User.objects.filter(email=email).exists():
-                messages.warning(req, 'User with this email already exists.')
+            # 🔥 **Check if email is already used**
+            if User.objects.filter(username=email).exists():
+                messages.warning(req, 'This email is already registered. Try logging in.')
                 return redirect(register)
 
-            
-            user = User.objects.create_user(first_name=name, username=email, email=email, password=password)
+            # 🔥 **Check if an unverified user exists, delete and re-register**
+            existing_user = User.objects.filter(email=email, is_active=False).first()
+            if existing_user:
+                existing_user.delete()  # Remove unverified user
+
+            # ✅ **Create new user**
+            user = User.objects.create_user(
+                first_name=name, username=email, email=email, password=password, is_active=False
+            )
             user.save()
 
+            send_verification_email(user)  # 🔥 Send verification email
             
-            send_mail(
-                'Account Registration',
-                'Your Sportix account registration was successful.',
-                settings.EMAIL_HOST_USER,
-                [email]
-            )
-
-            messages.success(req, 'Registration successful. Please log in.')
-            return redirect(sportix_login)
+            messages.success(req, 'Registration successful. Please check your email to verify your account.')
+            return redirect('check_email')  
 
         except ValidationError as e:
             messages.error(req, ', '.join(e)) 
             return redirect(register)
         
     return render(req, 'register.html')
+
+def check_email(request):
+    return render(request, 'check_email.html')
+
+def verify_email(request, token):
+    try:
+        verification = EmailVerification.objects.get(token=token)
+        user = verification.user
+        user.is_active = True  # ✅ Activate user account
+        user.save()
+        verification.delete()  # 🗑️ Remove token after verification
+        messages.success(request, "Your email has been verified! You can now log in.")
+        return redirect('sportix_login')  
+    except EmailVerification.DoesNotExist:
+        messages.error(request, "Invalid or expired verification link.")
+        return redirect('register')
 
 def sportix_logout(req):
     logout(req)
@@ -240,23 +269,51 @@ def view_product(request, id):
     return render(request, 'user/view_product.html', {'product': product, 'related_products': related_products,"cat":cat})
 
 def add_to_cart(request, product_id):
-    product = Products.objects.get(id=product_id)
+    product = get_object_or_404(Products, id=product_id)
     cart = request.session.get("cart", {})
 
-    if str(product_id) not in cart:
+    quantity = int(request.POST.get("quantity", 1))  # Get selected quantity
+    if quantity > product.stock:
+        messages.error(request, f"Only {product.stock} items available in stock.")
+        return redirect("view_product", product_id=product_id)  # Redirect back
+
+    if str(product_id) in cart:
+        if cart[str(product_id)]["quantity"] + quantity > product.stock:
+            messages.error(request, f"Only {product.stock} items available in stock.")
+            return redirect("cart")  # Redirect back to cart
+
+        cart[str(product_id)]["quantity"] += quantity
+    else:
         cart[str(product_id)] = {
             "name": product.name,
             "price": float(product.offer_price),  
             "quantity": int(request.POST.get("quantity", 1)),
             "image": product.image.url if product.image else "",
         }
-
     cart[str(product_id)]["subtotal"] = cart[str(product_id)]["quantity"] * cart[str(product_id)]["price"]
-
     request.session["cart"] = cart
     request.session.modified = True
+    messages.success(request, f"{product.name} added to cart.")
+    return redirect("view_cart") 
 
-    return redirect("view_cart")
+# def add_to_cart(request, product_id):
+#     product = Products.objects.get(id=product_id)
+#     cart = request.session.get("cart", {})
+
+#     if str(product_id) not in cart:
+#         cart[str(product_id)] = {
+#             "name": product.name,
+#             "price": float(product.offer_price),  
+#             "quantity": int(request.POST.get("quantity", 1)),
+#             "image": product.image.url if product.image else "",
+#         }
+
+#     cart[str(product_id)]["subtotal"] = cart[str(product_id)]["quantity"] * cart[str(product_id)]["price"]
+
+#     request.session["cart"] = cart
+#     request.session.modified = True
+
+#     return redirect("view_cart")
 
 def view_cart(request):
     cat=Category.objects.all()
@@ -278,18 +335,24 @@ def update_cart(request, product_id, action):
     cart = request.session.get("cart", {})
 
     if str(product_id) in cart:
+        product = get_object_or_404(Products, id=product_id)  # Get product from DB
+        current_quantity = cart[str(product_id)]["quantity"]
+
         if action == "increase":
-            cart[str(product_id)]["quantity"] += 1
+            if current_quantity < product.stock:  # Check stock before increasing
+                cart[str(product_id)]["quantity"] += 1
+            else:
+                messages.error(request, f"Only {product.stock} units available.")
+        
         elif action == "decrease":
-            if cart[str(product_id)]["quantity"] > 1:
+            if current_quantity > 1:
                 cart[str(product_id)]["quantity"] -= 1
             else:
-                del cart[str(product_id)]
+                del cart[str(product_id)]  # Remove from cart if quantity reaches 0
                 request.session["cart"] = cart
                 request.session.modified = True
-                return redirect("view_cart")  
+                return redirect("view_cart")
 
-        
         cart[str(product_id)]["subtotal"] = cart[str(product_id)]["quantity"] * cart[str(product_id)]["price"]
 
         request.session["cart"] = cart
@@ -371,34 +434,54 @@ def contact_us(request):
 
 
 def checkout(request):
+    print(request.method)
     user = request.user
-    cart = request.session.get("cart", {}).copy()  
+    cart = request.session.get("cart", {}).copy()
     buy_now = request.session.get("buy_now", None)
-    saved_addresses = request.session.get("saved_addresses", []) 
+    saved_addresses = request.session.get("saved_addresses", [])
+    # Ensure saved_addresses is a list of dictionaries
+    if isinstance(saved_addresses, str):  
+        try:
+            saved_addresses = json.loads(saved_addresses)  # Convert JSON string to list
+        except json.JSONDecodeError:
+            saved_addresses = []  # Reset if invalid
 
-    # Choose only one: Buy Now or Cart
+    # Ensure it's a valid list of dictionaries
+    if not isinstance(saved_addresses, list) or any(not isinstance(addr, dict) for addr in saved_addresses):
+        saved_addresses = []
+
+    # Fix session conflicts
     if "buy_now" in request.session and cart:
-        request.session.pop("buy_now", None)
+        del request.session["buy_now"]
     elif "cart" in request.session and buy_now:
-        request.session.pop("cart", None)
+        del request.session["cart"]
 
     if request.method == "POST":
         selected_address = request.POST.get("selected_address")
         new_address = request.POST.get("new_address")
+        mobile_number = request.POST.get("mobile_number")
+        pincode = request.POST.get("pincode")
 
         address = new_address if new_address else selected_address
-        if not address:
-            messages.error(request, "Please enter or select an address.")
+
+        if not address or not mobile_number or not pincode:
+            messages.error(request, "Please enter all required details.")
             return redirect("checkout")
 
-        if new_address and new_address not in saved_addresses:
-            saved_addresses.append(new_address)
-            request.session["saved_addresses"] = saved_addresses
+        if new_address and not any(addr["address"] == new_address for addr in saved_addresses):
+            saved_addresses.append({"address": new_address, "mobile": mobile_number, "pincode": pincode})
+            request.session["saved_addresses"] = json.dumps(saved_addresses)  # Store as JSON string
 
-        request.session["checkout_address"] = address  
-        request.session.modified = True
-        return redirect(verify_payment_and_complete_order)  
 
+        request.session["checkout_details"] = {
+            "address": address,
+            "mobile": mobile_number,
+            "pincode": pincode,
+        }
+        request.session.modified = True 
+
+        return redirect(complete_order) 
+    
     # Determine total price
     if buy_now:
         products = [buy_now]
@@ -411,17 +494,18 @@ def checkout(request):
 
     context = {
         "products": products,
-        "total_price": total_price,  # 🔥 Pass total price for Razorpay
+        "total_price": total_price,
         "expected_delivery": expected_delivery,
         "saved_addresses": saved_addresses,
-        "razorpay_key": settings.RAZORPAY_KEY_ID,  # 🔥 Pass Razorpay Key
+        "razorpay_key": settings.RAZORPAY_KEY_ID, 
     }
 
     return render(request, "user/checkout.html", context)
 
 
+
 @csrf_exempt
-def verify_payment_and_complete_order(request):  # 🔥 Renamed to avoid conflict
+def verify_payment_and_complete_order(request):
     if request.method == "POST":
         razorpay_payment_id = request.POST.get("razorpay_payment_id")
         razorpay_order_id = request.POST.get("razorpay_order_id")
@@ -472,10 +556,11 @@ def verify_payment_and_complete_order(request):  # 🔥 Renamed to avoid conflic
 
         return redirect("payment_success")
 
+
 @csrf_exempt
-def complete_order(request):
+def complete_razor_order(request):
     if request.method == "POST":
-        data = json.loads(request.body)  # ✅ This ensures JSON handling
+        data = json.loads(request.body)
         razorpay_payment_id = data.get("razorpay_payment_id")
         razorpay_order_id = data.get("razorpay_order_id")
         razorpay_signature = data.get("razorpay_signature")
@@ -535,48 +620,69 @@ def complete_order(request):
 
 
 # working good
-# def complete_order(request):
-#     address = request.session.get("checkout_address")
+def complete_order(request):
+    checkout_details = request.session.get("checkout_details")
+    if not checkout_details:
+        return redirect(checkout) 
     
-#     if not address:
-#         return redirect(checkout) 
+    address = checkout_details["address"]
+    mobile_number = checkout_details["mobile"]
+    pincode = checkout_details["pincode"]
 
-#     buy_now = request.session.get("buy_now", None)
-#     cart = request.session.get("cart", {})
+    buy_now = request.session.get("buy_now", None)
+    cart = request.session.get("cart", {})
+    
+    print(f"BUY NOW: {buy_now}")  
+    print(f"CART CONTENTS: {cart}") 
 
-#     print(f"BUY NOW: {buy_now}")  # Debugging
-#     print(f"CART CONTENTS: {cart}")  # Debugging
+    if buy_now:
+        product = get_object_or_404(Products, id=buy_now["id"])  # Get product
+        if product.stock >= buy_now["quantity"]:  # Check stock availability
+            Order.objects.create(
+            user=request.user,
+            product_id=buy_now["id"],
+            quantity=buy_now["quantity"],
+            total_price=buy_now["price"],
+            address=address,
+            mobile_number=mobile_number,
+            pincode=pincode,
+        )
+            product.stock -= buy_now["quantity"]  # Reduce stock
+            product.save()  # Save updated stock
 
-#     if buy_now:
-#         # 🛠 Process only Buy Now order and ignore cart
-#         Order.objects.create(
-#             user=request.user,
-#             product_id=buy_now["id"],
-#             quantity=buy_now["quantity"],  
-#             total_price=buy_now["price"],
-#             address=address,
-#         )
-#         request.session.pop("buy_now", None)  # ✅ Clear Buy Now after order
-#         request.session.pop("checkout_address", None)
-#         request.session.modified = True
-#         return redirect(order_success)  # ✅ Immediately return, don't process cart!
+            request.session.pop("buy_now", None)  
+            request.session.pop("checkout_address", None)
+            request.session.modified = True
+            return redirect(order_success)
+        else:
+            messages.error(request, f"Only {product.stock} units available.")  
+            return redirect("checkout")
 
-#     elif cart:  
-#         # 🛠 Process Cart order only if Buy Now is not present
-#         for product_id, item in cart.items():
-#             Order.objects.create(
-#                 user=request.user,
-#                 product_id=product_id,
-#                 quantity=item["quantity"],
-#                 total_price=item["price"] * item["quantity"],
-#                 address=address,
-#             )
-#         request.session.pop("cart", None)  # ✅ Clear Cart after order
+    elif cart:  
+        for product_id, item in cart.items():
+            product = get_object_or_404(Products, id=product_id)  # Get product
+            if product.stock >= item["quantity"]:  # Check stock availability
+                Order.objects.create(
+                    user=request.user,
+                    product_id=product_id,
+                    quantity=item["quantity"],
+                    total_price=item["price"] * item["quantity"],
+                    address=address,
+                    mobile_number=mobile_number,
+                    pincode=pincode,
+                )
+                product.stock -= item["quantity"]  # Reduce stock
+                product.save()  # Save updated stock
+            else:
+                messages.error(request, f"Only {product.stock} units available for {product.name}.")  
+                return redirect("checkout")  
 
-#     request.session.pop("checkout_address", None)
-#     request.session.modified = True
+        request.session.pop("cart", None)  
 
-#     return redirect(order_success)
+    request.session.pop("checkout_address", None)
+    request.session.modified = True
+
+    return redirect(order_success)
 
 
 
@@ -598,9 +704,9 @@ def order_success(request):
 
 def buy_now(request, id):
     if request.method == "POST":
-        quantity = int(request.POST.get("quantity", 1))  # Get quantity from the form
+        quantity = int(request.POST.get("quantity", 1))
     else:
-        quantity = 1  # Default to 1 if not a POST request
+        quantity = 1 
 
     product = Products.objects.get(id=id)
     total_price = float(product.offer_price) * quantity
@@ -665,7 +771,7 @@ def create_razorpay_order(request):
     if request.method == "POST":
         try:
             data = json.loads(request.body)
-            amount = int(float(data["amount"]) * 100)  # Convert to paisa
+            amount = int(float(data["amount"]) * 100)  
 
             client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
             razorpay_order = client.order.create(
@@ -681,3 +787,42 @@ def payment_success(request):
 
 def payment_failed(request):
     return render(request, "user/payment_failed.html")
+
+
+# def complete_cod_order(request):
+#     address = request.session.get("checkout_address")
+    
+#     if not address:
+#         return redirect(checkout) 
+
+#     buy_now = request.session.get("buy_now", None)
+#     cart = request.session.get("cart", {})
+
+#     print(f"BUY NOW: {buy_now}") 
+#     print(f"CART CONTENTS: {cart}")
+
+#     if buy_now:
+#         Order.objects.create(
+#             user=request.user,
+#             product_id=buy_now["id"],
+#             quantity=buy_now["quantity"],  
+#             total_price=buy_now["price"],
+#             address=address,
+#         )
+#         request.session.pop("buy_now", None)
+#         request.session.pop("checkout_address", None)
+#         request.session.modified = True
+#         return redirect(order_success)
+#     elif cart:
+#         for product_id, item in cart.items():
+#             Order.objects.create(
+#                 user=request.user,
+#                 product_id=product_id,
+#                 quantity=item["quantity"],
+#                 total_price=item["price"] * item["quantity"],
+#                 address=address,
+#             )
+#         request.session.pop("checkout_address",None)
+#         request.session.modified = True
+
+#         return redirect(order_success)

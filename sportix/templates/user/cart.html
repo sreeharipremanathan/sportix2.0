@@ -49,6 +49,10 @@
                 width: 100%;
                 margin-top: 10px; /* Adjust for mobile view */
             }
+            .nav-link svg{
+                display: none;
+            }
+            
         }
         
     </style>
@@ -163,6 +167,8 @@
         </div>
     </nav>
 
+    
+    <div class="container mt-5 wrapper" style="padding-top: 40px;">
     {% if messages %}
     {% for message in messages %}
     <div class="alert 
@@ -175,7 +181,6 @@
     </div>
     {% endfor %}
     {% endif %}
-    <div class="container mt-5 wrapper" style="padding-top: 40px;">
         <h2 class="mb-4">Shopping Cart</h2>
     
         {% if cart %}
@@ -195,9 +200,9 @@
                                     <button class="btn btn-outline-secondary btn-sm me-2" disabled>-</button>
                                 {% endif %}
                                 
-                                <span class="fw-bold">{{ item.quantity }}</span>
+                                <span class="fw-bold" >{{ item.quantity }}</span>
                                 
-                                <a href="{% url 'update_cart' key 'increase' %}" class="btn btn-outline-secondary btn-sm ms-2">+</a>
+                                <a href="{% url 'update_cart' key 'increase' %}" class="btn btn-outline-secondary btn-sm ms-2" >+</a>
                             </div>
                             
     

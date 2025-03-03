@@ -29,6 +29,10 @@
                 width: 100%;
                 margin-top: 10px; /* Adjust for mobile view */
             }
+            .nav-link svg{
+                display: none;
+            }
+            
         }
     </style>
 </head>
@@ -163,7 +167,9 @@
                     {% else %}
                         <p class="text-danger">Out of Stock</p>
                     {% endif %}
-        
+                    <div class=" mt-3">
+                        <strong class="text-danger">Note:</strong><p class="text-danger">Order cancellation should done with in two days!!!</p>
+                    </div>
                     <form method="POST" action="../buy_now/{{ product.id }}">
                         {% csrf_token %}
                         <div class="d-flex align-items-center">
