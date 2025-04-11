@@ -34,7 +34,7 @@ def sportix_login(req):
                     req.session['user'] = uname
                     return redirect(reverse('sportix_home'))  # Fix this
             else:
-                messages.warning(req, 'Invalid username or password')
+                messages.error(req, 'Invalid username or password')
                 return redirect(reverse('sportix_login'))
     return render(req, 'login.html')
 
@@ -59,7 +59,6 @@ def register(req):
         try:
             validate_password(password)
             
-            # 🔥 **Check if email is already used**
             if User.objects.filter(username=email).exists():
                 messages.warning(req, 'This email is already registered. Try logging in.')
                 return redirect(register)
@@ -67,9 +66,9 @@ def register(req):
             # 🔥 **Check if an unverified user exists, delete and re-register**
             existing_user = User.objects.filter(email=email, is_active=False).first()
             if existing_user:
-                existing_user.delete()  # Remove unverified user
+                existing_user.delete()  
 
-            # ✅ **Create new user**
+            
             user = User.objects.create_user(
                 first_name=name, username=email, email=email, password=password, is_active=False
             )
@@ -93,9 +92,9 @@ def verify_email(request, token):
     try:
         verification = EmailVerification.objects.get(token=token)
         user = verification.user
-        user.is_active = True  # ✅ Activate user account
+        user.is_active = True 
         user.save()
-        verification.delete()  # 🗑️ Remove token after verification
+        verification.delete()  
         messages.success(request, "Your email has been verified! You can now log in.")
         return redirect('sportix_login')  
     except EmailVerification.DoesNotExist:
